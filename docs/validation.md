@@ -34,7 +34,8 @@ denials; the authorized rerun passed all 16 tests.
 
 ## Not verified
 
-- macOS, Debian and Arch startup, installation and UI behavior.
+- macOS and Debian startup, installation and UI behavior.
+- Arch distributions other than the Omarchy host documented below.
 - Native desktop installers or installation of the generated wheel.
 - Playback, microphone access or device permissions on any platform.
 - Real ASR, local LLM output quality, offline model inference and acceleration.
@@ -45,3 +46,22 @@ denials; the authorized rerun passed all 16 tests.
 Component availability was researched through official sources in
 [the foundation decision](decisions/0001-foundation.md); application compatibility
 must not be inferred from that availability alone.
+
+## Omarchy startup correction
+
+Date: 2026-10-01. Host: Omarchy 4.0.4 (Arch-based), Python 3.14.7,
+Tk 8.6.16, SQLite 3.53.4.
+
+The documented demo command initially failed with an `ImportError` for
+`libtk8.6.so`. The Tkinter module existed, so the previous module-spec check
+incorrectly reported it as available. Dependency status now imports Tkinter to
+check native library loading without opening a window. Startup reports missing
+Tk support or display access with actionable messages and a nonzero exit code.
+
+Installed the system `tk` package and its `tcl` dependency through Omarchy's
+package helper after system authentication. The 19 routine tests passed,
+including regression tests for missing native libraries, missing Tkinter and
+display failures. Compilation and `git diff --check` passed. `--check` reports
+Tkinter as available after installation. Both native GUI smoke tests passed on
+the desktop outside the sandbox; their initial sandbox run failed because it
+could not connect to display `:0`.

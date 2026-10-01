@@ -2,10 +2,12 @@
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from .adapters import DemoSpeech, DemoText, UnconfiguredSpeech, UnconfiguredText
 from .management import dependency_status
+from .i18n import _
 from .paths import data_directory
 from .storage import Store
 from .tasks import TaskQueue
@@ -20,10 +22,22 @@ def main():
     if args.check:
         print(json.dumps(dependency_status(), indent=2))
         return
-    import tkinter as tk
+    try:
+        import tkinter as tk
+    except (ImportError, OSError) as error:
+        print(_("Unable to load Tkinter: {error}\n"
+                "Install Tk support for your Python installation: the tk system package on Arch/Omarchy, "
+                "python3-tk on Debian, or a Python installation with Tk on Windows/macOS.\n"
+                "See the README troubleshooting instructions.").format(error=error), file=sys.stderr)
+        return 1
+    try:
+        root = tk.Tk()
+    except tk.TclError as error:
+        print(_("Unable to open the desktop window: {error}\n"
+                "Run this command from a graphical desktop session and check your Tk installation "
+                "with python -m tkinter.").format(error=error), file=sys.stderr)
+        return 1
     from .ui import Application
-
-    root = tk.Tk()
     tasks = None
     try:
         store = Store((args.data_dir or data_directory()) / "history.sqlite3")
@@ -38,4 +52,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

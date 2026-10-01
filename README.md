@@ -44,6 +44,26 @@ python -m local_whisper
 python -m local_whisper --demo
 ```
 
+### Startup troubleshooting
+
+If startup reports `No module named tkinter` or a missing native library such as
+`libtk8.6.so`, install Tk support for the Python executable you are using.
+On Omarchy, run `omarchy pkg add tk`; on Arch, run `sudo pacman -S --needed tk`;
+on Debian, run `sudo apt install python3-tk`. These commands install system
+packages and require administrator authentication. A Python virtual environment
+alone does not supply the native Tk libraries.
+
+Then run `python -m tkinter` to verify that a test window opens, and retry
+`python -m local_whisper --demo`. Use `python3` instead if that is your Python
+command. On Windows/macOS, use a Python installation that includes Tk support.
+
+`--check` verifies that Tkinter and its native libraries can be imported without
+opening a window. It does not verify access to a graphical display. If startup
+reports that it cannot open the desktop window, run it from a graphical desktop
+session; a headless terminal does not provide a display for this application.
+
+### Demo workflow
+
 To keep development data in an ignored repository directory:
 
 ```text
