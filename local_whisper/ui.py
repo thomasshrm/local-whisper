@@ -22,6 +22,7 @@ class Application:
         self.playback = Playback()
         self._closed = False
         self._snapshot = None
+        self._pending_task_id = None
         self._poll_id = None
         root.title(_("Local Whisper — development preview"))
         root.geometry("1050x720")
@@ -87,7 +88,7 @@ class Application:
         self.stop_button = ttk.Button(controls, text=_("Stop playback"), command=self.playback.stop, state="disabled")
         self.stop_button.pack(side="left")
         ttk.Label(self.audio_tab, text=_("Files are referenced in place. Playback: mono/stereo 16-bit PCM WAV. "
-                                       "Transcription: mono 16-bit PCM WAV at 16000 Hz."), wraplength=850).pack(anchor="w", pady=8)
+                                       "Transcription: mono/stereo 16-bit PCM WAV at 16000 Hz."), wraplength=850).pack(anchor="w", pady=8)
         self.playback_label = ttk.Label(self.audio_tab, text=_("Playback: idle"), wraplength=850)
         self.playback_label.pack(anchor="w")
         self.playback_progress = ttk.Progressbar(self.audio_tab, maximum=100)
@@ -233,7 +234,9 @@ class Application:
         self._snapshot = None
 
     def transcribe(self):
-        self._guard(lambda: self.tasks.submit(self._selected(self.sources_tree)))
+        def operation():
+            self._pending_task_id = self.tasks.submit(self._selected(self.sources_tree))
+        self._guard(operation)
 
     def cancel_task(self):
         self._guard(lambda: self.tasks.cancel(self._selected(self.tasks_tree)))
@@ -339,6 +342,10 @@ class Application:
             self._replace(self.sources_tree, [(s["id"], (names[s["id"]], s["created_at"])) for s in sources])
             self._replace(self.history_tree, [(s["id"], (names[s["id"]], version_counts[s["id"]], s["created_at"])) for s in sources])
             self._replace(self.tasks_tree, [(t["id"], (names.get(t["source_id"], ""), _(t["kind"]), _(t["status"]))) for t in tasks])
+            if self._pending_task_id and self.tasks_tree.exists(self._pending_task_id):
+                self.tasks_tree.selection_set(self._pending_task_id)
+                self.tasks_tree.see(self._pending_task_id)
+                self._pending_task_id = None
             if hasattr(self, "open_source"):
                 self._refresh_versions()
             self._task_detail()

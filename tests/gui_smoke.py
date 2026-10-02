@@ -12,6 +12,7 @@ from local_whisper.adapters import DemoSpeech, DemoText
 from local_whisper.domain import Kind
 from local_whisper.storage import Store
 from local_whisper.tasks import TaskQueue
+from local_whisper.speech import WhisperConfig, WhisperCppSpeech
 from local_whisper.ui import Application
 
 
@@ -49,6 +50,7 @@ class DesktopSmokeTests(unittest.TestCase):
         self.app.transcribe_button.invoke()
         self.queue.wait_idle()
         self.refresh()
+        self.assertEqual(self.app.tasks_tree.selection(), (self.store.tasks()[0]["id"],))
         self.app.history_tree.selection_set(source)
         self.app.open_versions()
         self.app.derive(Kind.INTELLIGENT)
@@ -77,6 +79,28 @@ class DesktopSmokeTests(unittest.TestCase):
 
     def test_normal_preview_disables_simulated_transcription(self):
         self.assertIn("disabled", self.app.transcribe_button.state())
+
+    def test_queued_failure_is_selected_and_displays_reason(self):
+        with wave.open(str(self.audio), "wb") as audio:
+            audio.setnchannels(2)
+            audio.setsampwidth(2)
+            audio.setframerate(44100)
+            audio.writeframes(b"\x00\x00" * 3200)
+        model = self.directory / "model.bin"
+        model.write_bytes(b"test model")
+        self.queue.set_speech(WhisperCppSpeech(WhisperConfig(Path(sys.executable), model)))
+        source = self.store.import_audio(self.audio)
+        self.refresh()
+        self.app.sources_tree.selection_set(source)
+        with patch("local_whisper.speech.subprocess.Popen") as process:
+            self.app.transcribe()
+            self.queue.wait_idle()
+            process.assert_not_called()
+        self.refresh()
+        task = self.store.tasks()[0]
+        self.assertEqual(task["status"], "failed")
+        self.assertEqual(self.app.tasks_tree.selection(), (task["id"],))
+        self.assertIn("44100 Hz", self.app.task_error.cget("text"))
 
     def test_local_configuration_and_playback_controls(self):
         # Exercise real widgets with simulated audio output and no model download.

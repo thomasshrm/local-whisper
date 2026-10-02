@@ -22,8 +22,10 @@ def pcm_wav(path: Path, *, speech: bool = False):
         if (source.getcomptype() != "NONE" or source.getsampwidth() != 2
                 or source.getnchannels() not in (1, 2) or source.getnframes() == 0):
             raise AudioError("Choose a nonempty 16-bit PCM WAV file with one or two channels.")
-        if speech and (source.getframerate() != 16000 or source.getnchannels() != 1):
-            raise AudioError("Transcription currently requires a mono 16-bit PCM WAV file at 16000 Hz.")
+        if speech and source.getframerate() != 16000:
+            raise AudioError("Transcription currently requires a 16-bit PCM WAV file at 16000 Hz "
+                             "with one or two channels. This file is at "
+                             f"{source.getframerate()} Hz.")
         yield source
 
 

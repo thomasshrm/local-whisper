@@ -55,12 +55,13 @@ class WhisperCppSpeech:
         self.config.validate()
         audio = audio.resolve(strict=True)
         with pcm_wav(audio, speech=True) as source:
+            channels = source.getnchannels()
             # Validate all declared frames in bounded chunks before invoking native code.
             remaining = source.getnframes()
             while remaining:
                 check_cancelled(cancel)
                 count = min(remaining, 16000)
-                if len(source.readframes(count)) != count * 2:
+                if len(source.readframes(count)) != count * channels * 2:
                     raise AudioError("The WAV file is truncated or incomplete.")
                 remaining -= count
         model_digest = file_digest(self.config.model, cancel)
@@ -100,7 +101,9 @@ class WhisperCppSpeech:
                                "model_sha256": model_digest, "engine_sha256": engine_digest,
                                "audio_sha256": audio_digest, "executable": str(self.config.executable),
                                "model_path": str(self.config.model), "sample_rate": 16000,
-                               "channels": 1, "sample_width": 2, "output": "whisper-cli text"})
+                               "channels": channels, "sample_width": 2,
+                               "channel_handling": "engine downmix to mono" if channels == 2 else "mono",
+                               "output": "whisper-cli text"})
             finally:
                 if process.poll() is None:
                     process.terminate()

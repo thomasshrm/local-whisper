@@ -85,9 +85,12 @@ Setup may require network access; the application only passes local file paths
 and never invokes a downloader or remote inference endpoint.
 
 In **Models**, select the executable and model, enter `auto` or a Whisper
-language code (`en`, `fr`, etc.), then apply the configuration. Select a **mono
+language code (`en`, `fr`, etc.), then apply the configuration. Select a **mono/stereo
 16-bit PCM WAV at 16000 Hz**, queue a local transcription, and open its History
-entry to view/copy/export the raw version. Use a multilingual model for language
+entry to view/copy/export the raw version. Stereo WAV is also accepted: the
+engine downmixes it to mono without modifying the source file, and provenance
+records the original channel count. The newly queued task is selected so its
+status/error appears automatically. Use a multilingual model for language
 auto detection or French; `.en` models are English-only. Unsupported model
 formats/languages produce a task error. Models are not copied or deleted by
 removing the configuration. MP3/FLAC/M4A/OGG decoding is pending.

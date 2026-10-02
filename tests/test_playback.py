@@ -29,7 +29,10 @@ class PlaybackTests(unittest.TestCase):
     def test_pcm_formats_and_speech_requirements(self):
         with pcm_wav(self.audio, speech=True) as source:
             self.assertEqual(source.getnframes(), 1600)
-        for settings in ({"rate": 44100}, {"channels": 2}):
+        write_wav(self.audio, channels=2)
+        with pcm_wav(self.audio, speech=True) as source:
+            self.assertEqual(source.getnchannels(), 2)
+        for settings in ({"rate": 44100},):
             write_wav(self.audio, **settings)
             with pcm_wav(self.audio):
                 pass

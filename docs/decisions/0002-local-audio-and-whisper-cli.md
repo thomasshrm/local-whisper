@@ -15,7 +15,7 @@ requires CFFI and explains PortAudio bundling on Windows/macOS and the system
 runtime requirement on Linux. Packaging must account for those native libraries.
 
 Run a user-selected native `whisper-cli` in a separate subprocess, without a
-shell, using a local model and audio path. Initial speech input is mono 16-bit
+shell, using a local model and audio path. Speech input is mono/stereo 16-bit
 PCM WAV at 16000 Hz; initial inference is CPU-only. This avoids Python bindings
 coupled to interpreter-specific inference wheels and permits terminate/kill
 cancellation. The upstream [whisper.cpp documentation](https://github.com/ggml-org/whisper.cpp)
@@ -24,6 +24,13 @@ code is [MIT-licensed](https://github.com/ggml-org/whisper.cpp/blob/v1.9.4/LICEN
 The [v1.9.4 CLI source](https://github.com/ggml-org/whisper.cpp/blob/v1.9.4/examples/cli/cli.cpp)
 documents local model/input, language, CPU mode and text-output arguments used
 by this adapter. This is component evidence, not application certification.
+
+Stereo input is accepted without modifying the original WAV. The v1.9.4
+[audio reader](https://github.com/ggml-org/whisper.cpp/blob/v1.9.4/examples/common-whisper.cpp)
+configures the decoder for mono inference, including stereo downmix. The adapter
+validates the correct byte count per source frame and records the original
+channel count and engine downmix in provenance. The 16000 Hz application input
+restriction remains until broader sample-rate handling is verified.
 
 The initial integration fixture is `ggerganov/whisper.cpp`'s
 `ggml-tiny-q5_1.bin`, a quantized multilingual Whisper model converted to GGML.

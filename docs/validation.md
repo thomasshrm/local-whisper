@@ -153,3 +153,25 @@ LOCAL_WHISPER_CLI=.work/whisper-build/bin/whisper-cli LOCAL_WHISPER_MODEL=.work/
 ```
 
 These are host integration commands, not Windows/macOS packaging instructions.
+
+## Stereo transcription rejection correction
+
+Date: 2026-10-02. Host: the same Omarchy installation.
+
+A reported immediate failure came from the application's mono-only input check,
+before engine launch. The converted file was already 16000 Hz, 16-bit PCM, with
+two channels. The installed whisper.cpp v1.9.4 decoder supports stereo downmix,
+so the adapter now accepts mono/stereo, validates bytes using the source channel
+count, and records that count plus engine downmix in provenance. Source audio
+is not rewritten. Other sample rates remain rejected with their actual rate in
+the message.
+
+All 39 routine tests passed, including successful stereo input with source hash
+preservation and rejection of truncated stereo frames. All four native Tk tests
+passed outside the sandbox, including automatic selection of a queued task and
+display of its failure reason. Compilation and whitespace checks passed.
+A real local transcription of the reported stereo file succeeded and produced
+nonempty text. Its content was not printed, exported or added to the user's
+history; temporary engine output was cleaned by the adapter. Existing failed
+tasks remain unchanged and require a newly queued attempt after application
+restart. No additional platform compatibility is established by this fix.

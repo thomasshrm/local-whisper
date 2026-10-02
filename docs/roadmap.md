@@ -15,7 +15,7 @@ observed on GitHub; they do not validate desktop packaging or hardware.
 
 Implemented first slice: optional `sounddevice` PCM WAV playback with progress
 and cancellation; local whisper.cpp CLI configuration in Models; CPU transcription
-of mono 16 kHz/16-bit PCM WAV; process termination on cancellation; exact raw
+of mono/stereo 16 kHz/16-bit PCM WAV; process termination on cancellation; exact raw
 text/provenance preservation and immutable queued model selection. Local speech
 and audio integration tests are separate from routine simulated tests. See
 [the runtime decision](decisions/0002-local-audio-and-whisper-cli.md) and validation

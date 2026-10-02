@@ -133,13 +133,31 @@ class SpeechTests(unittest.TestCase):
         self.assertEqual(target.read_bytes(), "  Bonjour !\r\nDeuxième ligne.\n\n".encode("utf-8"))
 
     def test_unsupported_audio_never_launches_engine(self):
-        for settings in ({"rate": 44100}, {"channels": 2}, {"width": 1}):
+        for settings in ({"rate": 44100}, {"channels": 3}, {"width": 1}):
             write_wav(self.audio, **settings)
             with self.assertRaises(AudioError):
                 WhisperCppSpeech(self.config).transcribe(self.audio, Event())
         write_wav(self.audio)
         self.audio.write_bytes(self.audio.read_bytes()[:-2])
         with self.assertRaises(AudioError):
+            WhisperCppSpeech(self.config).transcribe(self.audio, Event())
+        self.assertEqual(self.commands, [])
+
+    def test_stereo_transcription_preserves_source_and_records_channel_count(self):
+        write_wav(self.audio, channels=2)
+        original = self.audio.read_bytes()
+        result = WhisperCppSpeech(self.config).transcribe(self.audio, Event())
+        self.assertEqual(result.parameters["channels"], 2)
+        self.assertEqual(result.parameters["channel_handling"], "engine downmix to mono")
+        self.assertEqual(result.parameters["audio_sha256"], hashlib.sha256(original).hexdigest())
+        self.assertEqual(self.audio.read_bytes(), original)
+        self.assertEqual(Path(self.commands[0][self.commands[0].index("-f") + 1]), self.audio)
+        self.assert_temporary_outputs_removed()
+
+    def test_truncated_stereo_does_not_launch_engine(self):
+        write_wav(self.audio, channels=2)
+        self.audio.write_bytes(self.audio.read_bytes()[:-2])
+        with self.assertRaisesRegex(AudioError, "truncated"):
             WhisperCppSpeech(self.config).transcribe(self.audio, Event())
         self.assertEqual(self.commands, [])
 
