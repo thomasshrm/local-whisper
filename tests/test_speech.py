@@ -151,7 +151,7 @@ class SpeechTests(unittest.TestCase):
         self.assertEqual(result.parameters["channel_handling"], "engine downmix to mono")
         self.assertEqual(result.parameters["audio_sha256"], hashlib.sha256(original).hexdigest())
         self.assertEqual(self.audio.read_bytes(), original)
-        self.assertEqual(Path(self.commands[0][self.commands[0].index("-f") + 1]), self.audio)
+        self.assertEqual(Path(self.commands[0][self.commands[0].index("-f") + 1]), self.audio.resolve())
         self.assert_temporary_outputs_removed()
 
     def test_truncated_stereo_does_not_launch_engine(self):
@@ -164,12 +164,15 @@ class SpeechTests(unittest.TestCase):
     def test_configuration_persistence_validation_and_removal(self):
         store = Store(self.directory / "history.sqlite3")
         store.set_speech_config(self.config)
-        self.assertEqual(Store(store.path).speech_config(), self.config)
+        # Persistence canonicalizes paths, including macOS /var symlinks and
+        # Windows short-name aliases. Compare against that explicit contract.
+        expected = WhisperConfig(self.config.executable.resolve(), self.config.model.resolve(), self.config.language)
+        self.assertEqual(Store(store.path).speech_config(), expected)
         for config in (WhisperConfig(Path("missing"), self.model),
                        WhisperConfig(Path(sys.executable), self.model, "fr --translate")):
             with self.assertRaises(ValueError):
                 store.set_speech_config(config)
-        self.assertEqual(store.speech_config(), self.config)
+        self.assertEqual(store.speech_config(), expected)
         store.set_speech_config(None)
         self.assertIsNone(Store(store.path).speech_config())
         self.assertTrue(self.model.exists())

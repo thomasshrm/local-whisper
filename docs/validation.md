@@ -195,3 +195,21 @@ a queue entry, preserving a previous reading selection and removal of deleted
 entries. The smoke test refresh helper now replaces its scheduled poll instead
 of accumulating callbacks between manual refreshes. Compilation and whitespace
 checks passed. Windows/macOS/Debian/Ubuntu GUI execution remains unverified.
+
+## CI path alias assertion correction
+
+Date: 2026-10-02. The
+[GitHub CI run for 7093968](https://github.com/thomasshrm/local-whisper/actions/runs/36972814273)
+passed Ubuntu core tests but failed Windows/macOS Python 3.11/3.14 jobs. The two
+speech assertions compared canonical persisted/engine paths with unresolved
+temporary paths. macOS used `/var` versus `/private/var`; Windows used a short
+user-directory alias versus the full directory name. Those aliases refer to
+the same files; production path normalization was correct.
+
+Both failures were reproduced on the Omarchy host by running the affected tests
+with a symlinked temporary directory. After correcting the expected paths,
+all 39 routine tests passed with that aliased directory, including persistence,
+stereo input, subprocess cancellation and cleanup. Compilation and whitespace
+checks also passed. No production behavior or workflow matrix was changed.
+The corrected commit still requires a fresh GitHub run to confirm all six jobs;
+the local regression exercise is not a native Windows/macOS test.
