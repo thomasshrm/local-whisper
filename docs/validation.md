@@ -246,3 +246,30 @@ upstream sources listed in [the LLM decision](decisions/0003-local-llm-completio
 A concrete binary version/model pair, English/French quality, memory/latency,
 Windows/macOS/Debian execution and native packaging remain unverified. The UI
 checks use withdrawn native widgets; they do not establish visual/accessibility QA.
+
+## Windows CI simulated LLM output encoding correction
+
+Date: 2026-10-02. Host: the same Omarchy/Arch installation.
+
+The supplied Windows CI trace showed an invalid response in the UTF-8 boundary
+check and no derived version in the lineage check. Both failures were reproduced
+locally, unchanged, by running those tests with `PYTHONIOENCODING=cp1252`.
+The simulated Python CLI printed non-ASCII JSON through redirected stdout using
+the platform's default encoding. The adapter correctly rejected those bytes as
+invalid UTF-8; the lineage test then indexed a version that had never been saved.
+
+The simulated CLI now explicitly configures UTF-8 stdout and LF transport
+newlines. JSON-escaped transcript CRLF/whitespace remains preserved. A new
+regression forces a cp1252 child stdio default with UTF-8 mode disabled, then
+checks successful accented output and cleanup. The lineage test now asserts
+successful task completion before inspecting the derived version, so future
+failures expose the safe task diagnostic rather than an unrelated index error.
+Production decoding and optional LLM behavior are unchanged.
+
+- `PYTHONIOENCODING=cp1252 PYTHONUTF8=0 python -m unittest tests.test_text -v`:
+  all 11 LLM boundary tests passed after correction.
+- `python -m unittest discover -s tests -q`: all 50 routine tests passed.
+- Compilation and whitespace checks passed.
+
+This reproduces the encoding failure on Linux; a fresh Windows CI run is still
+needed to confirm native execution. No push or remote CI rerun was performed.

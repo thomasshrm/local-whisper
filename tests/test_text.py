@@ -21,6 +21,8 @@ from local_whisper.text import LlamaConfig, LlamaCppText, TextError, build_promp
 FAKE_CLI = '''
 import json, sys, time
 from pathlib import Path
+# Match the native engine's UTF-8 output contract independently of host locale.
+sys.stdout.reconfigure(encoding="utf-8", newline="\\n")
 args = sys.argv[1:]
 model = Path(args[args.index("-m") + 1])
 mode = model.read_bytes()[4:].decode()
@@ -102,6 +104,14 @@ class TextTests(unittest.TestCase):
         self.assertEqual(self.model.read_bytes(), b"GGUFsuccess")
         self.assert_cleaned()
 
+    def test_response_is_utf8_with_non_utf8_child_stdio_default(self):
+        # Redirected Python stdout defaults to a legacy code page on Windows.
+        # Force that default on every platform before the fixture configures UTF-8.
+        with patch.dict(os.environ, {"PYTHONIOENCODING": "cp1252", "PYTHONUTF8": "0"}):
+            result = LlamaCppText(self.config).process("Bonjour", Kind.INTELLIGENT, Event())
+        self.assertEqual(result.text, "  Bonjour !\r\nDeuxième ligne.\n")
+        self.assert_cleaned()
+
     def test_invalid_failed_truncated_and_changed_outputs_rejected(self):
         for mode in ("fail", "invalid", "empty", "extra", "trailing", "oversized", "unicode", "change"):
             with self.subTest(mode=mode):
@@ -160,8 +170,10 @@ class TextTests(unittest.TestCase):
         queue = TaskQueue(store, DemoSpeech(), LlamaCppText(self.config))
         self.addCleanup(queue.join)
         self.addCleanup(queue.close)
-        queue.submit(source, Kind.INTELLIGENT, raw.id)
+        task_id = queue.submit(source, Kind.INTELLIGENT, raw.id)
         queue.wait_idle()
+        task = next(t for t in store.tasks() if t["id"] == task_id)
+        self.assertEqual(task["status"], Status.COMPLETED, task["error"])
         intelligent = store.versions(source)[1]
         queue.submit(source, Kind.REPORT, intelligent.id)
         queue.submit(source, Kind.INTELLIGENT, raw.id)
