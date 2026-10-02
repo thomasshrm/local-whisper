@@ -11,6 +11,11 @@ shutdown to protect active tasks from another process's recovery; portable core
 CI on Windows, macOS and Ubuntu with Python 3.11 and 3.14. CI runs still need to be
 observed on GitHub; they do not validate desktop packaging or hardware.
 
+Usability follow-up: completed results populate the Transcripts source selector
+without requiring a History detour, including after restart. Completed queue
+entries open their source's versions through a button, double-click or Enter.
+Reading selections remain stable when another file finishes.
+
 ## Increment 2 — verified audio and speech integration
 
 Implemented first slice: optional `sounddevice` PCM WAV playback with progress

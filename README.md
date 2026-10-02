@@ -87,7 +87,11 @@ and never invokes a downloader or remote inference endpoint.
 In **Models**, select the executable and model, enter `auto` or a Whisper
 language code (`en`, `fr`, etc.), then apply the configuration. Select a **mono/stereo
 16-bit PCM WAV at 16000 Hz**, queue a local transcription, and open its History
-entry to view/copy/export the raw version. Stereo WAV is also accepted: the
+entry to view/copy/export the raw version. Completed results also appear directly
+in **Transcripts**, with an audio-source selector and the latest version selected
+on first opening/startup. Existing reading selections are kept when other files
+finish. Select a completed task and use **Open selected task's transcript**,
+double-click it or press Enter to open its source's versions. Stereo WAV is also accepted: the
 engine downmixes it to mono without modifying the source file, and provenance
 records the original channel count. The newly queued task is selected so its
 status/error appears automatically. Use a multilingual model for language

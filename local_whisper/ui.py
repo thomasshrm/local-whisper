@@ -5,7 +5,7 @@ import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .domain import Kind
+from .domain import Kind, Status
 from .i18n import _
 from .management import HF_TOKEN_URL, dependency_status
 from .storage import Store
@@ -97,6 +97,10 @@ class Application:
         ttk.Label(self.audio_tab, text=_("Processing queue")).pack(anchor="w")
         self.tasks_tree = self._tree(self.audio_tab, ("file", "kind", "status"), (_("Audio source"), _("Operation"), _("Status")))
         self.tasks_tree.bind("<<TreeviewSelect>>", self._task_detail)
+        self.tasks_tree.bind("<Double-1>", lambda event: self.open_task_versions())
+        self.tasks_tree.bind("<Return>", lambda event: self.open_task_versions())
+        ttk.Button(self.audio_tab, text=_("Open selected task's transcript"),
+                   command=self.open_task_versions).pack(anchor="w")
         ttk.Button(self.audio_tab, text=_("Cancel selected task"), command=self.cancel_task).pack(anchor="w")
         self.task_error = ttk.Label(self.audio_tab, text="", wraplength=850)
         self.task_error.pack(anchor="w", pady=8)
@@ -111,7 +115,16 @@ class Application:
         self._guard(lambda: self.playback.play(Path(self.store.source(self._selected(self.sources_tree))["path"])))
 
     def _build_transcripts(self):
-        ttk.Label(self.transcripts_tab, text=_("Select an entry in History to inspect its immutable transcript versions.")).pack(anchor="w")
+        ttk.Label(self.transcripts_tab, text=_("Choose an audio entry to inspect its transcript versions. "
+                                             "Completed transcripts remain available after restarting the application."),
+                  wraplength=850).pack(anchor="w")
+        row = ttk.Frame(self.transcripts_tab)
+        row.pack(fill="x", pady=8)
+        ttk.Label(row, text=_("Audio source:")).pack(side="left", padx=(0, 8))
+        self.transcript_sources = []
+        self.transcript_source = ttk.Combobox(row, state="readonly")
+        self.transcript_source.pack(side="left", fill="x", expand=True)
+        self.transcript_source.bind("<<ComboboxSelected>>", self._select_transcript_source)
         self.versions_tree = self._tree(self.transcripts_tab, ("kind", "engine", "date"),
                                         (_("Version"), _("Engine / model"), _("Created at (UTC)")), height=5)
         self.versions_tree.bind("<<TreeviewSelect>>", self._show_version)
@@ -247,11 +260,48 @@ class Application:
         self.task_error.configure(text=_(details["error"]) if details and details["error"] else "")
 
     def open_versions(self):
+        self._guard(lambda: self._open_transcripts(self._selected(self.history_tree)))
+
+    def open_task_versions(self):
         def operation():
-            self.open_source = self._selected(self.history_tree)
-            self._refresh_versions()
-            self.notebook.select(self.transcripts_tab)
+            task_id = self._selected(self.tasks_tree)
+            task = next((t for t in self.store.tasks() if t["id"] == task_id), None)
+            if task is None or task["status"] != Status.COMPLETED:
+                raise ValueError(_("Select a completed task to open its transcript."))
+            self._open_transcripts(task["source_id"])
         self._guard(operation)
+
+    def _open_transcripts(self, source_id):
+        self.store.source(source_id)
+        self.open_source = source_id
+        self._sync_transcript_selection()
+        self._refresh_versions()
+        self.notebook.select(self.transcripts_tab)
+
+    def _select_transcript_source(self, event=None):
+        index = self.transcript_source.current()
+        if index >= 0:
+            self._guard(lambda: self._open_transcripts(self.transcript_sources[index]))
+
+    def _sync_transcript_selection(self):
+        source = getattr(self, "open_source", None)
+        if source in self.transcript_sources:
+            self.transcript_source.current(self.transcript_sources.index(source))
+        else:
+            self.transcript_source.set("")
+
+    def _refresh_transcript_sources(self, sources, version_counts):
+        available = [s for s in sources if version_counts[s["id"]]]
+        self.transcript_sources = [s["id"] for s in available]
+        self.transcript_source.configure(values=[f"{Path(s['path']).name} — {s['created_at']}" for s in available])
+        if getattr(self, "open_source", None) not in {s["id"] for s in sources}:
+            if available:
+                self.open_source = available[0]["id"]
+            elif hasattr(self, "open_source"):
+                del self.open_source
+                self._replace(self.versions_tree, [])
+                self._show_version()
+        self._sync_transcript_selection()
 
     def _refresh_versions(self):
         versions = self.store.versions(self.open_source)
@@ -341,6 +391,7 @@ class Application:
             names = {s["id"]: Path(s["path"]).name for s in sources}
             self._replace(self.sources_tree, [(s["id"], (names[s["id"]], s["created_at"])) for s in sources])
             self._replace(self.history_tree, [(s["id"], (names[s["id"]], version_counts[s["id"]], s["created_at"])) for s in sources])
+            self._refresh_transcript_sources(sources, version_counts)
             self._replace(self.tasks_tree, [(t["id"], (names.get(t["source_id"], ""), _(t["kind"]), _(t["status"]))) for t in tasks])
             if self._pending_task_id and self.tasks_tree.exists(self._pending_task_id):
                 self.tasks_tree.selection_set(self._pending_task_id)

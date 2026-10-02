@@ -175,3 +175,23 @@ nonempty text. Its content was not printed, exported or added to the user's
 history; temporary engine output was cleaned by the adapter. Existing failed
 tasks remain unchanged and require a newly queued attempt after application
 restart. No additional platform compatibility is established by this fix.
+
+## Completed transcript navigation correction
+
+Date: 2026-10-02. Host: the same Omarchy installation.
+
+Read-only inspection confirmed the reported completed task had a stored raw
+version. The empty Transcripts view required a History selection; storage and
+recognition had succeeded. Transcripts now lists audio entries with versions,
+loads an available result on first completion/startup, and preserves an existing
+reading selection when another source finishes. A button, double-click and
+Enter open completed queue entries directly. History navigation stays available.
+No user transcript content was printed or changed during diagnosis.
+
+All 39 routine tests and seven native Tk tests passed. New widget regressions
+cover first completion without History navigation, saved results after restart,
+switching between imports of the same filename, opening the correct source from
+a queue entry, preserving a previous reading selection and removal of deleted
+entries. The smoke test refresh helper now replaces its scheduled poll instead
+of accumulating callbacks between manual refreshes. Compilation and whitespace
+checks passed. Windows/macOS/Debian/Ubuntu GUI execution remains unverified.

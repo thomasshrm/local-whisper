@@ -37,6 +37,10 @@ class DesktopSmokeTests(unittest.TestCase):
             audio.writeframes(b"\x00\x00" * 1600)
 
     def refresh(self):
+        # Replace the scheduled poll; manual refresh must not add another timer.
+        if self.app._poll_id is not None:
+            self.root.after_cancel(self.app._poll_id)
+            self.app._poll_id = None
         self.app._poll()
         self.root.update_idletasks()
 
@@ -75,10 +79,79 @@ class DesktopSmokeTests(unittest.TestCase):
             self.app.delete()
         self.refresh()
         self.assertEqual(self.store.sources(), [])
+        self.assertEqual(self.app.transcript_sources, [])
+        self.assertEqual(self.app.versions_tree.get_children(), ())
+        self.assertEqual(self.app.text.get("1.0", "end-1c"), "")
         self.assertTrue(self.audio.exists())
 
     def test_normal_preview_disables_simulated_transcription(self):
         self.assertIn("disabled", self.app.transcribe_button.state())
+
+    def test_completed_transcript_is_visible_without_opening_history(self):
+        source = self.store.import_audio(self.audio)
+        self.refresh()
+        self.app.sources_tree.selection_set(source)
+        self.app.transcribe()
+        self.queue.wait_idle()
+        self.refresh()
+        raw = self.store.versions(source)[0]
+        self.app.notebook.select(self.app.transcripts_tab)
+        self.assertEqual(self.app.transcript_sources, [source])
+        self.assertEqual(self.app.versions_tree.selection(), (raw.id,))
+        self.assertEqual(self.app.text.get("1.0", "end-1c"), raw.text)
+
+    def test_source_selector_and_completed_task_open_correct_transcripts(self):
+        first = self.store.import_audio(self.audio)
+        self.queue.submit(first)
+        self.queue.wait_idle()
+        self.refresh()
+        first_version = self.store.versions(first)[0]
+        # Same filename, separate imports: the selector must distinguish entries.
+        second = self.store.import_audio(self.audio)
+        second_task = self.queue.submit(second)
+        self.queue.wait_idle()
+        self.refresh()
+        second_version = self.store.versions(second)[0]
+        self.assertEqual(self.app.versions_tree.selection(), (first_version.id,))
+        labels = self.app.transcript_source.cget("values")
+        self.assertEqual(len(labels), 2)
+        self.assertNotEqual(labels[0], labels[1])
+        self.app.transcript_source.current(self.app.transcript_sources.index(second))
+        self.app.transcript_source.event_generate("<<ComboboxSelected>>")
+        self.root.update()
+        self.assertEqual(self.app.versions_tree.selection(), (second_version.id,))
+        self.app.history_tree.selection_set(first)
+        self.app.open_versions()
+        self.assertEqual(self.app.versions_tree.selection(), (first_version.id,))
+        self.app.notebook.select(self.app.audio_tab)
+        self.app.tasks_tree.selection_set(second_task)
+        self.app.open_task_versions()
+        self.assertEqual(self.app.notebook.select(), str(self.app.transcripts_tab))
+        self.assertEqual(self.app.versions_tree.selection(), (second_version.id,))
+        with patch("local_whisper.ui.messagebox.askyesno", return_value=True):
+            self.app.history_tree.selection_set(second)
+            self.app.delete()
+        self.refresh()
+        self.assertEqual(self.app.transcript_sources, [first])
+        self.assertEqual(self.app.versions_tree.selection(), (first_version.id,))
+
+    def test_completed_transcript_is_visible_after_restart(self):
+        source = self.store.import_audio(self.audio)
+        self.queue.submit(source)
+        self.queue.wait_idle()
+        raw = self.store.versions(source)[0]
+        self.app.close()
+        self.queue.join()
+        store = Store(self.store.path)
+        queue = TaskQueue(store, DemoSpeech(), DemoText())
+        self.addCleanup(queue.join)
+        root = tk.Tk()
+        root.withdraw()
+        app = Application(root, store, queue, demo=True)
+        self.addCleanup(app.close)
+        self.assertEqual(app.transcript_sources, [source])
+        self.assertEqual(app.versions_tree.selection(), (raw.id,))
+        self.assertEqual(app.text.get("1.0", "end-1c"), raw.text)
 
     def test_queued_failure_is_selected_and_displays_reason(self):
         with wave.open(str(self.audio), "wb") as audio:
