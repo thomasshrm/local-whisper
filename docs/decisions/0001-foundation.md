@@ -52,6 +52,14 @@ or packaging on every platform. macOS, Debian and Arch remain untested.
 - `management.py`: dependency status and official Hugging Face link; installation,
   catalog, downloads and secret storage are pending.
 - `paths.py` and `i18n.py`: platform directories and gettext boundary.
+- `instance.py`: desktop history ownership through native nonblocking file locks
+  before database initialization/recovery, retained until the worker has stopped.
+  Uses [fcntl.flock](https://docs.python.org/3/library/fcntl.html) on Unix and
+  [msvcrt.locking](https://docs.python.org/3/library/msvcrt.html) on Windows.
+  The sidecar remains on disk to avoid races from replacing a locked inode.
+  OS process exit releases the lock; no stale PID deletion is needed. This is a
+  local-filesystem protocol for application instances, not access control against
+  unrelated SQLite clients. Windows/macOS execution still requires validation.
 
 Initial import accepts file references without decoding. The future first
 decoder should prioritize PCM WAV, with other formats added only after decoder

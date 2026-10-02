@@ -1,7 +1,7 @@
 # Local Whisper
 
-A local desktop audio transcription application for Windows, macOS, Debian and
-Arch. This repository currently contains the first **development preview**, not
+A local desktop audio transcription application for Windows, macOS, Debian,
+Ubuntu, Arch and Omarchy. This repository currently contains a **development preview**, not
 a working speech recognition engine.
 
 ## Current increment
@@ -20,6 +20,10 @@ a working speech recognition engine.
   intelligent transcript or generate a structured report.
 - Tested segment boundary logic and a persistent silence threshold. No live
   microphone or VAD adapter is connected yet.
+- One desktop instance per history, with an OS lock protecting active tasks from
+  recovery by a second instance. Different history directories can open independently.
+- GitHub Actions portable tests on Windows, macOS and Ubuntu with Python 3.11/3.14.
+  The workflow has not yet been executed on GitHub.
 
 **Not implemented yet:** real speech/LLM inference, audio playback, microphone
 capture, dependency installation, model downloads/catalog, hardware detection,
@@ -128,8 +132,15 @@ opens the official token creation page in the browser and requires network
 access. This preview never accepts or stores a token. SQLite is not encrypted;
 use your operating system's user account and disk protection for local history.
 
-Run only one application process per history database. Shutdown requests
-cancellation. An adapter must observe cancellation to terminate promptly; hard
+The desktop refuses a second application process for the same history database
+with a visible message. The lock is released by the OS if the process exits;
+the empty `history.sqlite3.lock` sidecar is kept and must not be removed while
+the application is running. Use local storage for history; network filesystem
+locking has not been validated. Direct library consumers must also acquire
+`history_instance` before opening storage and starting a task queue.
+
+Shutdown requests cancellation and retains history ownership until the worker
+exits. An adapter must observe cancellation to terminate promptly; hard
 process isolation for unresponsive runtimes is a future task. Interrupted tasks
 are marked failed on the next startup and are never automatically retried.
 
@@ -139,3 +150,9 @@ See [the foundation decision](docs/decisions/0001-foundation.md),
 [the implementation roadmap](docs/roadmap.md) and
 [validation evidence](docs/validation.md). Interfaces, storage, engine adapters,
 orchestration, audio segmentation and management status live in separate modules.
+
+The roadmap includes a dedicated GitHub Actions build and release increment for
+downloadable Windows/macOS binaries and Debian/Ubuntu/Arch packages, with Omarchy
+validation. Standalone packaging and release publication are still pending; the
+current CI only runs tests. Its matrix follows the official
+[GitHub Python CI guidance](https://docs.github.com/en/actions/tutorials/build-and-test-code/python).

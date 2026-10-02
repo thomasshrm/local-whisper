@@ -8,6 +8,7 @@ from pathlib import Path
 from .adapters import DemoSpeech, DemoText, UnconfiguredSpeech, UnconfiguredText
 from .management import dependency_status
 from .i18n import _
+from .instance import HistoryInUse, history_instance
 from .paths import data_directory
 from .storage import Store
 from .tasks import TaskQueue
@@ -38,17 +39,29 @@ def main():
                 "with python -m tkinter.").format(error=error), file=sys.stderr)
         return 1
     from .ui import Application
-    tasks = None
     try:
-        store = Store((args.data_dir or data_directory()) / "history.sqlite3")
-        tasks = TaskQueue(store, DemoSpeech() if args.demo else UnconfiguredSpeech(),
-                          DemoText() if args.demo else UnconfiguredText())
-        Application(root, store, tasks, args.demo)
-        root.mainloop()
+        with history_instance((args.data_dir or data_directory()) / "history.sqlite3"):
+            tasks = None
+            try:
+                store = Store((args.data_dir or data_directory()) / "history.sqlite3")
+                tasks = TaskQueue(store, DemoSpeech() if args.demo else UnconfiguredSpeech(),
+                                  DemoText() if args.demo else UnconfiguredText())
+                Application(root, store, tasks, args.demo)
+                root.mainloop()
+            finally:
+                if tasks:
+                    tasks.close()
+                    # Keep ownership until no worker can write to this history.
+                    tasks.join(timeout=None)
+    except HistoryInUse as error:
+        from tkinter import messagebox
+        messagebox.showerror(_("History already open"), _(str(error)), parent=root)
+        return 1
     finally:
-        if tasks:
-            tasks.close()
-            tasks.join()
+        try:
+            root.destroy()
+        except tk.TclError:
+            pass  # The window may already have been closed through Application.
 
 
 if __name__ == "__main__":

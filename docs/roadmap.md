@@ -6,6 +6,11 @@ Implemented: desktop shell, local history, append-only versions, background
 queue, explicit simulation, cancellation, export/deletion, dependency status,
 segment boundary logic and tests. See validation evidence for actual checks.
 
+Follow-up implemented: one application instance per history, held through worker
+shutdown to protect active tasks from another process's recovery; portable core
+CI on Windows, macOS and Ubuntu with Python 3.11 and 3.14. CI runs still need to be
+observed on GitHub; they do not validate desktop packaging or hardware.
+
 ## Increment 2 — verified audio and speech integration
 
 1. Confirm target languages, reference CPU/GPU/RAM and latency expectations.
@@ -15,8 +20,8 @@ segment boundary logic and tests. See validation evidence for actual checks.
 3. Select a playback/decoder/capture stack, check its packaging and licenses,
    then implement PCM WAV playback and a first real offline transcription adapter.
 4. Add progress reporting, bounded work history, model loading states, safe worker
-   process isolation and per-model integration tests. Enforce one process per
-   history database or coordinate recovery across processes.
+   process isolation and per-model integration tests. History ownership is now
+   enforced by the desktop entry point; keep it across future worker processes.
 
 ## Increment 3 — local intelligent transcript and report
 
@@ -44,9 +49,37 @@ Store Hugging Face tokens through operating system secret-store adapters, with
 replacement/removal and tests preventing leakage. Never fall back silently to
 plaintext tokens or change the global Python environment.
 
+## Increment 6 — GitHub Actions binary builds and downloadable releases
+
+1. Select and verify standalone packaging after the multimedia and inference
+   runtimes are chosen. Publish the supported OS versions and CPU architectures;
+   do not assume one Linux build works on every distribution.
+2. Add a GitHub Actions build matrix for downloadable Windows executables or
+   installers, macOS app bundles/installers, Debian/Ubuntu packages and Arch
+   packages. Cover Omarchy explicitly with installation and desktop validation
+   of the Arch package. Final package formats remain to be verified.
+3. Build on native runners or suitable isolated distribution environments. Pin
+   build dependencies, include required native libraries and license notices,
+   and keep audio, transcripts, tokens and downloaded models out of artifacts.
+4. Upload intermediate build artifacts for review. On version tags, verify
+   package versions, run installation/startup checks, produce checksums and
+   attach the validated binaries to a draft GitHub Release with installation
+   instructions and known limitations. Grant release write permission only to
+   the publication job. Separate artifact production from final publication.
+5. Decide Windows signing and macOS signing/notarization, configure credentials
+   as protected GitHub secrets, and document unsigned preview limitations until
+   signing is available. Test upgrades and uninstall behavior without losing
+   local history, and cancellation/offline use in installed builds.
+
+The current `.github/workflows/ci.yml` is the first automation step: portable
+tests only. It neither generates standalone binaries nor publishes releases.
+No release workflow has been executed and no packages are currently available.
+
 ## Release gates
 
-Choose and test standalone packaging for all four targets; test startup, playback,
+Choose and test standalone packaging for Windows, macOS, Debian, Ubuntu, Arch and
+Omarchy; test startup, playback,
 microphone permissions, offline inference, migration, accessibility and keyboard
-navigation. Add CI for portable core tests and separate hardware/model integration
-jobs. Resolve retention options, managed audio deletion and localization catalogs.
+navigation. Extend portable core CI with desktop, distribution and separate
+hardware/model integration jobs. Resolve retention options, managed audio deletion
+and localization catalogs.

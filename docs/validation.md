@@ -65,3 +65,24 @@ display failures. Compilation and `git diff --check` passed. `--check` reports
 Tkinter as available after installation. Both native GUI smoke tests passed on
 the desktop outside the sandbox; their initial sandbox run failed because it
 could not connect to display `:0`.
+
+## History ownership and CI follow-up
+
+Date: 2026-10-02. Host: Omarchy 4.0.4, Python 3.14.7, SQLite 3.53.4.
+
+- All 24 routine tests passed. New tests use actual child processes to verify
+  rejection of concurrent history ownership, release after normal exit and
+  abrupt process exit, and independent history directories. Startup regressions
+  verify that a refused instance never opens storage or starts task recovery,
+  and that the history lock remains held while waiting for worker shutdown.
+- Both native Tk smoke tests passed outside the sandbox. The sandbox attempt
+  failed with `couldn't connect to display ":0"`; the approved retry could access
+  the desktop. These checks do not constitute manual visual/accessibility QA.
+- Compilation, `--check` and whitespace checks passed.
+- The CI YAML parsed with the locally available PyYAML, with six OS/Python
+  matrix combinations and read-only repository permissions. No GitHub Actions
+  run or workflow-specific linter has been executed here. Remote Windows/macOS
+  tests, binary packaging and release publication remain unverified.
+
+This increment does not select an inference runtime or packaging tool. The new
+release roadmap explicitly covers Windows, macOS, Debian/Ubuntu and Arch/Omarchy.

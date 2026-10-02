@@ -1,0 +1,35 @@
+name: Portable core checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Core / ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+        python: ['3.11', '3.14']
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Test portable core and startup diagnostics
+        run: python -m unittest discover -s tests -v
+      - name: Compile application and tests
+        run: python -m compileall -q local_whisper tests
+      - name: Check dependency diagnostics without a display
+        run: python -m local_whisper --check
+      - name: Check whitespace
+        run: git diff --check

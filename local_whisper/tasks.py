@@ -105,5 +105,5 @@ class TaskQueue:
                 work.cancel.set()
             self._queue.put(None)
 
-    def join(self, timeout: float = 2):
+    def join(self, timeout: float | None = 2):
         self._thread.join(timeout)
