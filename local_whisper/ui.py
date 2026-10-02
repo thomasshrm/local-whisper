@@ -10,9 +10,10 @@ from .i18n import _
 from .management import HF_TOKEN_URL, dependency_status
 from .storage import Store
 from .tasks import TaskQueue
-from .adapters import UnconfiguredSpeech
+from .adapters import UnconfiguredSpeech, UnconfiguredText
 from .playback import Playback
 from .speech import WhisperConfig, WhisperCppSpeech
+from .text import LlamaConfig, LlamaCppText
 
 
 class Application:
@@ -51,10 +52,12 @@ class Application:
     def _update_banner(self):
         if self.demo:
             banner = _("DEMO MODE: all generated text is simulated. No audio recognition or LLM is running.")
-        elif isinstance(self.tasks.speech, WhisperCppSpeech):
-            banner = _("Local Whisper transcription selected (CPU). LLM processing is not configured.")
         else:
-            banner = _("Select a local speech engine and model in Models to enable transcription. LLM processing is not configured.")
+            speech = (_("Local Whisper transcription selected (CPU).") if isinstance(self.tasks.speech, WhisperCppSpeech)
+                      else _("Select a local speech engine and model in Models to enable transcription."))
+            text = (_("Local LLM processing selected (CPU). Review generated text for accuracy.")
+                    if isinstance(self.tasks.text, LlamaCppText) else _("Optional LLM processing is disabled."))
+            banner = speech + " " + text
         self.banner.configure(text=banner)
 
     def _tab(self, label):
@@ -134,13 +137,20 @@ class Application:
         self.text.pack(fill="both", expand=True, pady=8)
         controls = ttk.Frame(self.transcripts_tab)
         controls.pack(fill="x")
-        for label, command, needs_engine in [(_("Copy"), self.copy, False), (_("Export…"), self.export, False),
-                                            (_("Simulate intelligent version"), lambda: self.derive(Kind.INTELLIGENT), True),
-                                            (_("Simulate report version"), lambda: self.derive(Kind.REPORT), True)]:
-            button = ttk.Button(controls, text=label, command=command)
-            button.pack(side="left", padx=(0, 8))
-            if needs_engine and not self.demo:
-                button.configure(state="disabled")
+        for label, command in [(_("Copy"), self.copy), (_("Export…"), self.export)]:
+            ttk.Button(controls, text=label, command=command).pack(side="left", padx=(0, 8))
+        self.intelligent_button = ttk.Button(controls, command=lambda: self.derive(Kind.INTELLIGENT))
+        self.intelligent_button.pack(side="left", padx=(0, 8))
+        self.report_button = ttk.Button(controls, command=lambda: self.derive(Kind.REPORT))
+        self.report_button.pack(side="left")
+        self._update_text_buttons()
+
+    def _update_text_buttons(self):
+        available = self.demo or isinstance(self.tasks.text, LlamaCppText)
+        self.intelligent_button.configure(text=_("Simulate intelligent version") if self.demo else _("Create intelligent version"),
+                                           state="normal" if available else "disabled")
+        self.report_button.configure(text=_("Simulate report version") if self.demo else _("Create report version"),
+                                     state="normal" if available else "disabled")
 
     def _build_history(self):
         ttk.Label(self.history_tab, text=_("History persists locally. Select an entry to open its versions.")).pack(anchor="w")
@@ -155,10 +165,16 @@ class Application:
         ttk.Label(self.dictation_tab, text=_("Live microphone capture and voice activity detection are not integrated yet.\n"
                                             "The segment boundary logic is tested independently. Configure the future silence threshold in Settings."),
                   wraplength=850).pack(anchor="w")
-        ttk.Label(self.models_tab, text=_("Choose a trusted local whisper-cli executable and a Whisper model in whisper.cpp GGML format. "
+        model_tabs = ttk.Notebook(self.models_tab)
+        model_tabs.pack(fill="both", expand=True)
+        speech_frame = ttk.Frame(model_tabs, padding=8)
+        text_frame = ttk.Frame(model_tabs, padding=8)
+        model_tabs.add(speech_frame, text=_("Speech recognition"))
+        model_tabs.add(text_frame, text=_("Optional local LLM"))
+        ttk.Label(speech_frame, text=_("Choose a trusted local whisper-cli executable and a Whisper model in whisper.cpp GGML format. "
                                          "No downloads are performed. Transcription runs locally on the CPU. "
                                          "Model compatibility is checked by the engine during transcription.\n\n"
-                                         "Parakeet and local LLM support are pending. The exact Hugging Face identifier for ‘oruk/orukeet’ must be confirmed before integration."),
+                                         "Parakeet support is pending. The exact Hugging Face identifier for ‘oruk/orukeet’ must be confirmed before integration."),
                   wraplength=850).pack(anchor="w")
         config = self.store.speech_config()
         self.speech_executable = tk.StringVar(value=str(config.executable) if config else "")
@@ -166,12 +182,12 @@ class Application:
         self.speech_language = tk.StringVar(value=config.language if config else "auto")
         for label, variable in [(_("Speech engine executable"), self.speech_executable),
                                 (_("Local GGML model"), self.speech_model)]:
-            row = ttk.Frame(self.models_tab)
+            row = ttk.Frame(speech_frame)
             row.pack(fill="x", pady=8)
             ttk.Label(row, text=label, width=24).pack(side="left")
             ttk.Entry(row, textvariable=variable).pack(side="left", fill="x", expand=True)
             ttk.Button(row, text=_("Browse…"), command=lambda v=variable: self._browse_model(v)).pack(side="left", padx=8)
-        row = ttk.Frame(self.models_tab)
+        row = ttk.Frame(speech_frame)
         row.pack(anchor="w", pady=8)
         ttk.Label(row, text=_("Language (auto, en, fr, …):")).pack(side="left")
         ttk.Entry(row, textvariable=self.speech_language, width=10).pack(side="left", padx=8)
@@ -180,12 +196,73 @@ class Application:
         self.apply_speech_button.pack(side="left")
         ttk.Button(row, text=_("Remove configuration"), command=self.clear_speech,
                    state="disabled" if self.demo else "normal").pack(side="left", padx=8)
-        ttk.Label(self.models_tab, text=_("Changes apply to newly queued tasks. Existing tasks retain their selected model. "
+        ttk.Label(speech_frame, text=_("Changes apply to newly queued tasks. Existing tasks retain their selected model. "
                                          "Auto detection requires a multilingual model; use en for an English-only model. "
-                                         "Demo mode ignores saved speech settings."), wraplength=850).pack(anchor="w", pady=8)
+                                         "Demo mode ignores saved engine settings."), wraplength=850).pack(anchor="w", pady=8)
+
+        self._build_text_models(text_frame)
+
+    def _build_text_models(self, frame):
+        ttk.Label(frame, text=_("LLM processing is optional. Raw transcription, playback, history and exports work without a language model. "
+                                "The LLM runs only when you request an intelligent version or report. "
+                                "Select a trusted native llama-completion executable and a local GGUF language model. "
+                                "Processing runs offline on the CPU. No downloads are performed. "
+                                "Generated documents require review: models can omit or invent information."),
+                  wraplength=800).pack(anchor="w", pady=8)
+        config = self.store.text_config()
+        self.text_executable = tk.StringVar(value=str(config.executable) if config else "")
+        self.text_model = tk.StringVar(value=str(config.model) if config else "")
+        self.text_context = tk.StringVar(value=str(config.context_tokens) if config else "8192")
+        self.text_output = tk.StringVar(value=str(config.output_tokens) if config else "2048")
+        for label, variable in [(_("LLM executable"), self.text_executable), (_("Local GGUF model"), self.text_model)]:
+            row = ttk.Frame(frame)
+            row.pack(fill="x", pady=8)
+            ttk.Label(row, text=label, width=24).pack(side="left")
+            ttk.Entry(row, textvariable=variable).pack(side="left", fill="x", expand=True)
+            ttk.Button(row, text=_("Browse…"), command=lambda v=variable: self._browse_model(v)).pack(side="left", padx=8)
+        row = ttk.Frame(frame)
+        row.pack(anchor="w", pady=8)
+        for label, variable in [(_("Context tokens:"), self.text_context), (_("Maximum output tokens:"), self.text_output)]:
+            ttk.Label(row, text=label).pack(side="left")
+            ttk.Entry(row, textvariable=variable, width=8).pack(side="left", padx=8)
+        row = ttk.Frame(frame)
+        row.pack(anchor="w", pady=8)
+        ttk.Button(row, text=_("Apply LLM configuration"), command=self.configure_text,
+                   state="disabled" if self.demo else "normal").pack(side="left")
+        ttk.Button(row, text=_("Remove configuration"), command=self.clear_text,
+                   state="disabled" if self.demo else "normal").pack(side="left", padx=8)
+        ttk.Label(frame, text=_("Select a raw version in Transcripts to create an intelligent version; "
+                                "select an intelligent version to create a report. Every generation creates a new version. "
+                                "Changes apply to newly queued tasks. Removing configuration keeps model files. "
+                                "This preview limits prompts to 64 KiB and generation to ten minutes."),
+                  wraplength=800).pack(anchor="w", pady=8)
+
+    def configure_text(self):
+        if self.demo:
+            return
+        def operation():
+            config = LlamaConfig(Path(self.text_executable.get()), Path(self.text_model.get()),
+                                 int(self.text_context.get()), int(self.text_output.get()))
+            self.store.set_text_config(config)
+            self.tasks.set_text(LlamaCppText(config))
+            self._update_banner()
+            self._update_text_buttons()
+        self._guard(operation)
+
+    def clear_text(self):
+        if self.demo:
+            return
+        self.store.set_text_config(None)
+        self.tasks.set_text(UnconfiguredText())
+        self.text_executable.set("")
+        self.text_model.set("")
+        self.text_context.set("8192")
+        self.text_output.set("2048")
+        self._update_banner()
+        self._update_text_buttons()
 
     def _browse_model(self, variable):
-        path = filedialog.askopenfilename(parent=self.root, title=_("Select local speech engine or model"))
+        path = filedialog.askopenfilename(parent=self.root, title=_("Select local engine or model"))
         if path:
             variable.set(path)
 
@@ -345,7 +422,7 @@ class Application:
     def derive(self, kind):
         def operation():
             version = self.store.version(self._selected(self.versions_tree))
-            self.tasks.submit(version.source_id, kind, version.id)
+            self._pending_task_id = self.tasks.submit(version.source_id, kind, version.id)
         self._guard(operation)
 
     def delete(self):

@@ -14,6 +14,7 @@ from local_whisper.storage import Store
 from local_whisper.tasks import TaskQueue
 from local_whisper.speech import WhisperConfig, WhisperCppSpeech
 from local_whisper.ui import Application
+from local_whisper.text import LlamaCppText
 
 
 class DesktopSmokeTests(unittest.TestCase):
@@ -209,3 +210,31 @@ class DesktopSmokeTests(unittest.TestCase):
         self.assertIn("completed", self.app.playback_label.cget("text"))
         self.assertIn("disabled", self.app.stop_button.state())
         self.assertTrue(self.audio.exists())
+
+    def test_local_llm_configuration_controls_and_validation(self):
+        self.app.demo = False
+        self.app._update_text_buttons()
+        self.assertIn("disabled", self.app.intelligent_button.state())
+        self.assertIn("disabled", self.app.report_button.state())
+        model = self.directory / "model.gguf"
+        model.write_bytes(b"GGUFfixture")
+        self.app.text_executable.set(sys.executable)
+        self.app.text_model.set(str(model))
+        self.app.text_context.set("4096")
+        self.app.text_output.set("1024")
+        self.app.configure_text()
+        self.assertIsInstance(self.queue.text, LlamaCppText)
+        self.assertEqual(Store(self.store.path).text_config().context_tokens, 4096)
+        self.assertNotIn("disabled", self.app.intelligent_button.state())
+        self.assertNotIn("disabled", self.app.report_button.state())
+        self.assertIn("Local LLM processing selected", self.app.banner.cget("text"))
+        self.app.text_output.set("bad")
+        with patch("local_whisper.ui.messagebox.showerror") as dialog:
+            self.app.configure_text()
+            dialog.assert_called_once()
+        self.assertEqual(self.store.text_config().output_tokens, 1024)
+        self.app.clear_text()
+        self.assertIn("disabled", self.app.intelligent_button.state())
+        self.assertIn("disabled", self.app.report_button.state())
+        self.assertIsNone(Store(self.store.path).text_config())
+        self.assertTrue(model.exists())

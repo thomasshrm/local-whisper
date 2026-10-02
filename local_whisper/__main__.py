@@ -13,6 +13,7 @@ from .paths import data_directory
 from .storage import Store
 from .speech import WhisperCppSpeech
 from .tasks import TaskQueue
+from .text import LlamaCppText
 
 
 def main():
@@ -48,8 +49,9 @@ def main():
                 store = Store((args.data_dir or data_directory()) / "history.sqlite3")
                 config = store.speech_config()
                 speech = DemoSpeech() if args.demo else WhisperCppSpeech(config) if config else UnconfiguredSpeech()
-                tasks = TaskQueue(store, speech,
-                                  DemoText() if args.demo else UnconfiguredText())
+                text_config = store.text_config()
+                text = DemoText() if args.demo else LlamaCppText(text_config) if text_config else UnconfiguredText()
+                tasks = TaskQueue(store, speech, text)
                 app = Application(root, store, tasks, args.demo)
                 root.mainloop()
             finally:

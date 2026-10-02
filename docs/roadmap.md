@@ -41,7 +41,15 @@ Remaining:
 
 ## Increment 3 — local intelligent transcript and report
 
-Verify and integrate a local LLM runtime. Treat source text and model responses
+Implemented a strictly optional experimental CPU llama.cpp completion adapter with local GGUF
+selection, persistent settings/token limits, cancellable background processing,
+strict JSON output validation and preserved source lineage. Routine tests use
+simulated model responses; native Tk controls have local smoke coverage.
+See [the decision](decisions/0003-local-llm-completion.md).
+
+Remaining: validate a real runtime/model pair and its output quality on target
+platforms, verify model licenses/languages/resources, choose model-specific prompt
+or chat templates and handle long documents. No recommended LLM catalog exists. Treat source text and model responses
 as untrusted data. Spoken formatting commands may alter formatting only.
 Generate an intelligent version from a specific raw version and a report from
 a specific intelligent version. Evaluate meaning preservation, omitted facts,

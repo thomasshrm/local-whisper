@@ -8,6 +8,7 @@ from threading import Event, RLock, Thread
 from .adapters import Cancelled, SpeechAdapter, TextAdapter, check_cancelled
 from .audio import AudioError
 from .speech import SpeechError
+from .text import TextError
 from .domain import Kind, Status
 from .storage import Store
 
@@ -20,6 +21,7 @@ class Work:
     parent_id: str | None
     cancel: Event
     speech: SpeechAdapter
+    text: TextAdapter
 
 
 class TaskQueue:
@@ -46,7 +48,7 @@ class TaskQueue:
             elif parent_id is not None:
                 raise ValueError("Raw transcription cannot have a parent.")
             task_id = self.store.create_task(source_id, kind)
-            work = Work(task_id, source_id, kind, parent_id, Event(), self.speech)
+            work = Work(task_id, source_id, kind, parent_id, Event(), self.speech, self.text)
             self._work[task_id] = work
             self._queue.put(work)
             return task_id
@@ -63,6 +65,13 @@ class TaskQueue:
             if self._closed:
                 raise RuntimeError("Task queue is closed.")
             self.speech = adapter
+
+    def set_text(self, adapter: TextAdapter):
+        """New tasks use this adapter; queued work retains its configuration."""
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("Task queue is closed.")
+            self.text = adapter
 
     def source_busy(self, source_id: str) -> bool:
         with self._lock:
@@ -84,7 +93,7 @@ class TaskQueue:
                     else:
                         self.store.update_task(work.id, Status.PROCESSING)
                         parent = self.store.version(work.parent_id or "")
-                        result = self.text.process(parent.text, work.kind, work.cancel)
+                        result = work.text.process(parent.text, work.kind, work.cancel)
                     # Cancellation and persistence have a single ordered boundary.
                     with self._lock:
                         check_cancelled(work.cancel)
@@ -92,7 +101,7 @@ class TaskQueue:
                         self._work.pop(work.id, None)
                 except Cancelled:
                     self.store.update_task(work.id, Status.CANCELLED)
-                except (AudioError, SpeechError) as error:
+                except (AudioError, SpeechError, TextError) as error:
                     self.store.update_task(work.id, Status.FAILED, str(error))
                 except Exception:
                     # Adapter exception messages may contain private text or tokens.

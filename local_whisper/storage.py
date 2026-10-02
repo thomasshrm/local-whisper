@@ -196,3 +196,25 @@ class Store:
                             "model": str(config.model.resolve()), "language": config.language})
         with self.connection() as db:
             db.execute("INSERT OR REPLACE INTO settings VALUES ('whisper_cpp', ?)", (value,))
+
+    def text_config(self):
+        from .text import LlamaConfig
+        with self.connection() as db:
+            row = db.execute("SELECT value FROM settings WHERE key = 'llama_cpp'").fetchone()
+        if row is None:
+            return None
+        value = json.loads(row[0])
+        return LlamaConfig(Path(value["executable"]), Path(value["model"]),
+                           value["context_tokens"], value["output_tokens"])
+
+    def set_text_config(self, config):
+        if config is None:
+            with self.connection() as db:
+                db.execute("DELETE FROM settings WHERE key = 'llama_cpp'")
+            return
+        config.validate()
+        value = json.dumps({"executable": str(config.executable.resolve()),
+                            "model": str(config.model.resolve()), "context_tokens": config.context_tokens,
+                            "output_tokens": config.output_tokens})
+        with self.connection() as db:
+            db.execute("INSERT OR REPLACE INTO settings VALUES ('llama_cpp', ?)", (value,))

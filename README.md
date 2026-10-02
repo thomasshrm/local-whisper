@@ -2,7 +2,7 @@
 
 A local desktop audio transcription application for Windows, macOS, Debian,
 Ubuntu, Arch and Omarchy. This repository contains a **development preview**
-with PCM WAV playback and a first local Whisper transcription adapter.
+with PCM WAV playback, local Whisper transcription and a local LLM adapter.
 
 ## Current increment
 
@@ -14,6 +14,10 @@ with PCM WAV playback and a first local Whisper transcription adapter.
   executable and Whisper GGML model. Configuration is persistent and queued tasks
   keep their original model selection. Raw text is preserved exactly, with file
   hashes and audio/engine/model parameters in provenance.
+- Optional offline CPU LLM processing through a user-selected `llama-completion` executable
+  and local GGUF model, with persistent token limits and append-only intelligent
+  transcripts/reports. This integration is experimental; real model quality has
+  not yet been validated.
 - Serial background task queue with per-task status and cooperative cancellation.
 - SQLite history with a versioned schema and immutable, separate raw,
   intelligent and report versions, parent links and engine/model provenance.
@@ -30,11 +34,12 @@ with PCM WAV playback and a first local Whisper transcription adapter.
 - GitHub Actions portable tests on Windows, macOS and Ubuntu with Python 3.11/3.14.
   The workflow has not yet been executed on GitHub.
 
-**Not implemented yet:** local LLM inference, microphone
+**Not implemented yet:** microphone
 capture, dependency installation, model downloads/catalog, hardware detection,
 secret-store token configuration and standalone desktop installers. The ordinary
 preview enables real transcription after a local speech configuration is applied.
-Intelligent transcripts and reports remain simulation-only in demo mode.
+Intelligent transcripts and reports become available after configuring a local LLM.
+Demo mode continues to use simulated adapters.
 
 ## Run from the checkout
 
@@ -108,6 +113,45 @@ Task states currently provide coarse activity, including engine model loading
 within the transcription phase; no inference percentage or latency guarantee is
 reported. CPU is the initial mode; acceleration detection/configuration is pending.
 
+### Optional local intelligent transcripts and reports
+
+**A language model is never required for raw transcription, playback, history,
+copy or export.** No LLM is installed, downloaded or loaded by default, and even
+with saved configuration it runs only when you explicitly request an intelligent
+version or report. Raw transcription never chains into LLM processing. Laptop
+users can keep LLM processing disabled permanently. No minimum parameter count
+or model over 1B parameters is prescribed; suitability must be verified against
+available hardware before any recommendations.
+
+In **Models → Optional local LLM**, select a trusted native `llama-completion` executable
+from [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master/tools/completion)
+and a local GGUF language model. This adapter targets the completion tool;
+recent `llama-cli` versions have a different interface. GGUF header validation
+checks the format only; the runtime checks architecture compatibility.
+No model is recommended yet: verify its license, language support and hardware
+requirements separately. Acquiring the runtime/model may use the network;
+application processing passes local files with offline mode and CPU selection.
+
+Apply the configuration, select a **raw** version in **Transcripts**, and choose
+**Create intelligent version**. Select that intelligent version and choose
+**Create report version**. Each attempt appends a separate version linked to its
+source, including regeneration; neither source is replaced. Queue status and
+cancellation apply to LLM work too. Settings changes affect new tasks only,
+and removing configuration leaves local executable/model files intact.
+
+The default context/output limits are 8192/2048 tokens, not model requirements.
+Choose limits supported by your model and available memory. Invalid, empty or
+incomplete JSON responses fail without saving a derived version. The preview
+rejects prompts over 64 KiB, bounds output to 1 MiB, disables context shifting,
+and stops generation after ten minutes. Longer-document chunking, model-specific
+chat templates and quality evaluation remain pending. Context/token exhaustion
+may require adjusted limits. Valid JSON does not guarantee complete coverage of
+source facts: review generated documents for omissions and invented information.
+Transcribed commands and generated text are treated as data and cannot trigger
+application actions. Temporary prompts/responses are removed on normal completion,
+error or cancellation; abrupt OS termination can leave temporary files behind.
+See [the LLM boundary decision](docs/decisions/0003-local-llm-completion.md).
+
 ### Startup troubleshooting
 
 If startup reports `No module named tkinter` or a missing native library such as
@@ -160,6 +204,7 @@ Opt-in integration checks are separate from the normal suite:
 ```text
 python -m unittest tests.playback_integration -v
 python -m unittest tests.speech_integration -v
+python -m unittest tests.text_integration -v
 ```
 
 Playback integration requires the playback extra and an output device; it writes
@@ -167,8 +212,11 @@ only short silent WAV audio and never opens a microphone. Speech integration
 requires `LOCAL_WHISPER_CLI`, `LOCAL_WHISPER_MODEL` and `LOCAL_WHISPER_AUDIO`
 environment variables pointing to existing local files. The audio must contain
 speech in the supported WAV format. Optionally set `LOCAL_WHISPER_LANGUAGE`
-(defaults to `auto`). Without those paths, the speech test is skipped. Neither
-test downloads dependencies/models. See validation evidence for tested versions.
+(defaults to `auto`). Without those paths, the speech test is skipped. None of these
+tests download dependencies/models. For the LLM test, set
+`LOCAL_WHISPER_LLM_CLI` and `LOCAL_WHISPER_LLM_MODEL` to local completion executable
+and GGUF model paths. Its fact/uncertainty checks are partial semantic checks,
+not proof of meaning preservation; manual quality review remains required. See validation evidence for tested versions.
 
 The project has setuptools package metadata and a `local-whisper` GUI entry
 point. For an optional isolated editable installation, create a virtual

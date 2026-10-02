@@ -213,3 +213,36 @@ stereo input, subprocess cancellation and cleanup. Compilation and whitespace
 checks also passed. No production behavior or workflow matrix was changed.
 The corrected commit still requires a fresh GitHub run to confirm all six jobs;
 the local regression exercise is not a native Windows/macOS test.
+
+## Experimental local LLM completion workflow
+
+Date: 2026-10-02. Host: Omarchy/Arch x86-64, Python 3.14.7, SQLite 3.53.4.
+
+- `python -m unittest discover -s tests -q`: all 49 routine tests passed.
+  Nine new tests cover the adapter boundary, using simulated LLM output in actual
+  subprocesses where relevant, including UTF-8
+  and newline preservation, quoted adversarial source data, fixed CPU/offline
+  arguments, sanitized engine environment, parent lineage, regeneration,
+  restart, provenance export, deletion without audio loss, failed/invalid/
+  incomplete/oversized output, timeout, cancellation/child cleanup, persistent
+  configuration and frozen queued text adapter selection.
+- `python -m unittest tests.gui_smoke -v`: all eight native Tk tests passed
+  outside the sandbox. The initial sandbox attempt failed all eight because Tk
+  could not connect to display `:0`; the approved desktop-access retry succeeded.
+  The new widget check covers local LLM configuration, persisted token limits,
+  enabled generation controls, invalid input without replacing saved settings,
+  banner changes, and configuration removal without deleting model files.
+- `python -m unittest tests.text_integration -v`: one test skipped because no
+  local LLM executable/model paths were configured. No real LLM runtime/model
+  was downloaded, installed or invoked. Simulated responses are not evidence
+  of formatting quality, factual fidelity or prompt-injection resistance.
+- A further regression verifies that raw transcription completes, persists and
+  exports with an unconfigured LLM and with an adapter that must never be called.
+  No intelligent/report task is automatically added, even when an LLM is configured.
+- Compilation, dependency diagnostics and whitespace checks passed.
+
+The adapter's CLI options and target-platform build support were researched in
+upstream sources listed in [the LLM decision](decisions/0003-local-llm-completion.md).
+A concrete binary version/model pair, English/French quality, memory/latency,
+Windows/macOS/Debian execution and native packaging remain unverified. The UI
+checks use withdrawn native widgets; they do not establish visual/accessibility QA.

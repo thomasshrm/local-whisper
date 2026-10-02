@@ -27,7 +27,7 @@ def dependency_status() -> dict[str, str]:
         "Tkinter": tkinter_status(),
         "SQLite": sqlite3.sqlite_version,
         "Speech engine": "whisper.cpp adapter available; select a local executable and model in Models",
-        "Local LLM": "not configured",
+        "Local LLM (optional)": "disabled unless configured; raw transcription does not require it",
         "WAV playback": playback,
         "Microphone": "not integrated",
     }
