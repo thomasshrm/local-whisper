@@ -1,6 +1,7 @@
 """Opt-in native Tk smoke tests; run explicitly on a graphical desktop."""
 
 import tempfile
+import sys
 import tkinter as tk
 import unittest
 import wave
@@ -76,3 +77,38 @@ class DesktopSmokeTests(unittest.TestCase):
 
     def test_normal_preview_disables_simulated_transcription(self):
         self.assertIn("disabled", self.app.transcribe_button.state())
+
+    def test_local_configuration_and_playback_controls(self):
+        # Exercise real widgets with simulated audio output and no model download.
+        self.app.demo = False
+        model = self.directory / "model.bin"
+        model.write_bytes(b"test model")
+        self.app.speech_executable.set(sys.executable)
+        self.app.speech_model.set(str(model))
+        self.app.speech_language.set("fr")
+        self.app.configure_speech()
+        self.assertNotIn("disabled", self.app.transcribe_button.state())
+        self.assertEqual(Store(self.store.path).speech_config().language, "fr")
+        self.app.clear_speech()
+        self.assertIn("disabled", self.app.transcribe_button.state())
+        self.assertIsNone(self.store.speech_config())
+        self.assertTrue(model.exists())
+        with patch("local_whisper.ui.filedialog.askopenfilenames", return_value=(str(self.audio),)):
+            self.app.import_audio()
+        self.refresh()
+        self.app.sources_tree.selection_set(self.store.sources()[0]["id"])
+
+        class Output:
+            def play(self, audio, cancel, progress):
+                self.audio = audio
+                progress(1)
+
+        output = Output()
+        self.app.playback.adapter = output
+        self.app.play_button.invoke()
+        self.app.playback.join()
+        self.refresh()
+        self.assertEqual(output.audio, self.audio)
+        self.assertIn("completed", self.app.playback_label.cget("text"))
+        self.assertIn("disabled", self.app.stop_button.state())
+        self.assertTrue(self.audio.exists())

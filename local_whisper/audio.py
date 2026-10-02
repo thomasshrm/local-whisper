@@ -2,6 +2,29 @@
 
 from dataclasses import dataclass, field
 from math import isfinite
+from contextlib import contextmanager
+from pathlib import Path
+import wave
+
+
+class AudioError(ValueError):
+    """A safe, user-facing audio validation error."""
+
+
+@contextmanager
+def pcm_wav(path: Path, *, speech: bool = False):
+    """Open supported PCM without converting or modifying the source file."""
+    try:
+        source = wave.open(str(path), "rb")
+    except (wave.Error, EOFError):
+        raise AudioError("Choose an uncompressed PCM WAV file.") from None
+    with source:
+        if (source.getcomptype() != "NONE" or source.getsampwidth() != 2
+                or source.getnchannels() not in (1, 2) or source.getnframes() == 0):
+            raise AudioError("Choose a nonempty 16-bit PCM WAV file with one or two channels.")
+        if speech and (source.getframerate() != 16000 or source.getnchannels() != 1):
+            raise AudioError("Transcription currently requires a mono 16-bit PCM WAV file at 16000 Hz.")
+        yield source
 
 
 @dataclass

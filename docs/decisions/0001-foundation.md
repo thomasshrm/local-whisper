@@ -3,6 +3,10 @@
 Date: 2026-10-01. Status: adopted for the initial preview, subject to revisiting
 desktop accessibility and multimedia needs before a production UI is committed.
 
+The initial audio/inference limitations below describe the foundation stage.
+The first real audio and speech integration is recorded in
+[decision 0002](0002-local-audio-and-whisper-cli.md).
+
 ## Context and decision
 
 The repository initially contained only project instructions. No stack or engine

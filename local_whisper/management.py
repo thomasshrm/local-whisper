@@ -17,11 +17,17 @@ def tkinter_status() -> str:
 
 
 def dependency_status() -> dict[str, str]:
+    try:
+        module = importlib.import_module("sounddevice")
+        playback = f"sounddevice {module.__version__} / PortAudio available"
+    except (ImportError, OSError):
+        playback = "unavailable: install the playback extra and PortAudio"
     return {
         "Python": sys.version.split()[0],
         "Tkinter": tkinter_status(),
         "SQLite": sqlite3.sqlite_version,
-        "Speech engine": "not configured",
+        "Speech engine": "whisper.cpp adapter available; select a local executable and model in Models",
         "Local LLM": "not configured",
-        "Microphone / playback": "not integrated",
+        "WAV playback": playback,
+        "Microphone": "not integrated",
     }

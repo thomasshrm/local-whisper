@@ -11,6 +11,7 @@ from .i18n import _
 from .instance import HistoryInUse, history_instance
 from .paths import data_directory
 from .storage import Store
+from .speech import WhisperCppSpeech
 from .tasks import TaskQueue
 
 
@@ -42,13 +43,19 @@ def main():
     try:
         with history_instance((args.data_dir or data_directory()) / "history.sqlite3"):
             tasks = None
+            app = None
             try:
                 store = Store((args.data_dir or data_directory()) / "history.sqlite3")
-                tasks = TaskQueue(store, DemoSpeech() if args.demo else UnconfiguredSpeech(),
+                config = store.speech_config()
+                speech = DemoSpeech() if args.demo else WhisperCppSpeech(config) if config else UnconfiguredSpeech()
+                tasks = TaskQueue(store, speech,
                                   DemoText() if args.demo else UnconfiguredText())
-                Application(root, store, tasks, args.demo)
+                app = Application(root, store, tasks, args.demo)
                 root.mainloop()
             finally:
+                if app:
+                    app.close()
+                    app.playback.join(timeout=None)
                 if tasks:
                     tasks.close()
                     # Keep ownership until no worker can write to this history.

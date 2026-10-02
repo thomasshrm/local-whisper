@@ -137,7 +137,7 @@ class Store:
         else:
             raise ValueError("Choose a .txt or .json export.")
         # Exclusive creation prevents overwriting unrelated files.
-        with target.open("x", encoding="utf-8") as file:
+        with target.open("x", encoding="utf-8", newline="") as file:
             file.write(content)
 
     def create_task(self, source_id: str, kind: Kind) -> str:
@@ -176,3 +176,23 @@ class Store:
         with self.connection() as db:
             row = db.execute("SELECT value FROM settings WHERE key = 'silence_seconds'").fetchone()
             return float(row[0]) if row else 1.0
+
+    def speech_config(self):
+        from .speech import WhisperConfig
+        with self.connection() as db:
+            row = db.execute("SELECT value FROM settings WHERE key = 'whisper_cpp'").fetchone()
+        if row is None:
+            return None
+        value = json.loads(row[0])
+        return WhisperConfig(Path(value["executable"]), Path(value["model"]), value["language"])
+
+    def set_speech_config(self, config):
+        if config is None:
+            with self.connection() as db:
+                db.execute("DELETE FROM settings WHERE key = 'whisper_cpp'")
+            return
+        config.validate()
+        value = json.dumps({"executable": str(config.executable.resolve()),
+                            "model": str(config.model.resolve()), "language": config.language})
+        with self.connection() as db:
+            db.execute("INSERT OR REPLACE INTO settings VALUES ('whisper_cpp', ?)", (value,))

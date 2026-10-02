@@ -9,6 +9,9 @@ description = "Offline transcription desktop application foundation"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+playback = ["sounddevice==0.5.6"]
+
 [project.gui-scripts]
 local-whisper = "local_whisper.__main__:main"
 

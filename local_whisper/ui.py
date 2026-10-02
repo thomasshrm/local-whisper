@@ -10,21 +10,26 @@ from .i18n import _
 from .management import HF_TOKEN_URL, dependency_status
 from .storage import Store
 from .tasks import TaskQueue
+from .adapters import UnconfiguredSpeech
+from .playback import Playback
+from .speech import WhisperConfig, WhisperCppSpeech
 
 
 class Application:
     def __init__(self, root: tk.Tk, store: Store, tasks: TaskQueue, demo: bool):
         self.root, self.store, self.tasks = root, store, tasks
         self.demo = demo
+        self.playback = Playback()
+        self._closed = False
         self._snapshot = None
         self._poll_id = None
         root.title(_("Local Whisper — development preview"))
         root.geometry("1050x720")
         root.minsize(800, 560)
         root.protocol("WM_DELETE_WINDOW", self.close)
-        banner = (_("DEMO MODE: all generated text is simulated. No audio recognition or LLM is running.")
-                  if demo else _("Development preview: speech and LLM engines are not configured. Import and history are available."))
-        ttk.Label(root, text=banner, padding=12, wraplength=950).pack(fill="x")
+        self.banner = ttk.Label(root, padding=12, wraplength=950)
+        self.banner.pack(fill="x")
+        self._update_banner()
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill="both", expand=True, padx=12, pady=(0, 12))
         self.audio_tab = self._tab(_("Audio and queue"))
@@ -41,6 +46,15 @@ class Application:
         root.bind("<Control-o>", lambda event: self.import_audio())
         root.bind("<Control-c>", self._copy_shortcut)
         self._poll()
+
+    def _update_banner(self):
+        if self.demo:
+            banner = _("DEMO MODE: all generated text is simulated. No audio recognition or LLM is running.")
+        elif isinstance(self.tasks.speech, WhisperCppSpeech):
+            banner = _("Local Whisper transcription selected (CPU). LLM processing is not configured.")
+        else:
+            banner = _("Select a local speech engine and model in Models to enable transcription. LLM processing is not configured.")
+        self.banner.configure(text=banner)
 
     def _tab(self, label):
         frame = ttk.Frame(self.notebook, padding=12)
@@ -67,7 +81,17 @@ class Application:
         self.transcribe_button = ttk.Button(controls, text=_("Queue simulated transcription") if self.demo else _("Transcription unavailable"),
                                            command=self.transcribe, state="normal" if self.demo else "disabled")
         self.transcribe_button.pack(side="left")
-        ttk.Label(self.audio_tab, text=_("Files are referenced in place. Playback is not yet integrated."), wraplength=850).pack(anchor="w", pady=8)
+        self._update_transcribe_button()
+        self.play_button = ttk.Button(controls, text=_("Play selected audio"), command=self.play_audio)
+        self.play_button.pack(side="left", padx=8)
+        self.stop_button = ttk.Button(controls, text=_("Stop playback"), command=self.playback.stop, state="disabled")
+        self.stop_button.pack(side="left")
+        ttk.Label(self.audio_tab, text=_("Files are referenced in place. Playback: mono/stereo 16-bit PCM WAV. "
+                                       "Transcription: mono 16-bit PCM WAV at 16000 Hz."), wraplength=850).pack(anchor="w", pady=8)
+        self.playback_label = ttk.Label(self.audio_tab, text=_("Playback: idle"), wraplength=850)
+        self.playback_label.pack(anchor="w")
+        self.playback_progress = ttk.Progressbar(self.audio_tab, maximum=100)
+        self.playback_progress.pack(fill="x")
         self.sources_tree = self._tree(self.audio_tab, ("file", "date"), (_("Audio source"), _("Imported at (UTC)")))
         ttk.Label(self.audio_tab, text=_("Processing queue")).pack(anchor="w")
         self.tasks_tree = self._tree(self.audio_tab, ("file", "kind", "status"), (_("Audio source"), _("Operation"), _("Status")))
@@ -75,6 +99,15 @@ class Application:
         ttk.Button(self.audio_tab, text=_("Cancel selected task"), command=self.cancel_task).pack(anchor="w")
         self.task_error = ttk.Label(self.audio_tab, text="", wraplength=850)
         self.task_error.pack(anchor="w", pady=8)
+
+    def _update_transcribe_button(self):
+        available = self.demo or isinstance(self.tasks.speech, WhisperCppSpeech)
+        label = (_("Queue simulated transcription") if self.demo else _("Queue local transcription")
+                 if available else _("Transcription unavailable"))
+        self.transcribe_button.configure(text=label, state="normal" if available else "disabled")
+
+    def play_audio(self):
+        self._guard(lambda: self.playback.play(Path(self.store.source(self._selected(self.sources_tree))["path"])))
 
     def _build_transcripts(self):
         ttk.Label(self.transcripts_tab, text=_("Select an entry in History to inspect its immutable transcript versions.")).pack(anchor="w")
@@ -108,10 +141,62 @@ class Application:
         ttk.Label(self.dictation_tab, text=_("Live microphone capture and voice activity detection are not integrated yet.\n"
                                             "The segment boundary logic is tested independently. Configure the future silence threshold in Settings."),
                   wraplength=850).pack(anchor="w")
-        ttk.Label(self.models_tab, text=_("No model catalog has been verified yet. Downloads, installation and hardware detection will be added with real adapters.\n\n"
-                                         "Whisper-style engines, Parakeet 0.6B and local LLM runtimes remain to be evaluated.\n"
-                                         "The exact Hugging Face identifier for ‘oruk/orukeet’ must be confirmed before integration."),
+        ttk.Label(self.models_tab, text=_("Choose a trusted local whisper-cli executable and a Whisper model in whisper.cpp GGML format. "
+                                         "No downloads are performed. Transcription runs locally on the CPU. "
+                                         "Model compatibility is checked by the engine during transcription.\n\n"
+                                         "Parakeet and local LLM support are pending. The exact Hugging Face identifier for ‘oruk/orukeet’ must be confirmed before integration."),
                   wraplength=850).pack(anchor="w")
+        config = self.store.speech_config()
+        self.speech_executable = tk.StringVar(value=str(config.executable) if config else "")
+        self.speech_model = tk.StringVar(value=str(config.model) if config else "")
+        self.speech_language = tk.StringVar(value=config.language if config else "auto")
+        for label, variable in [(_("Speech engine executable"), self.speech_executable),
+                                (_("Local GGML model"), self.speech_model)]:
+            row = ttk.Frame(self.models_tab)
+            row.pack(fill="x", pady=8)
+            ttk.Label(row, text=label, width=24).pack(side="left")
+            ttk.Entry(row, textvariable=variable).pack(side="left", fill="x", expand=True)
+            ttk.Button(row, text=_("Browse…"), command=lambda v=variable: self._browse_model(v)).pack(side="left", padx=8)
+        row = ttk.Frame(self.models_tab)
+        row.pack(anchor="w", pady=8)
+        ttk.Label(row, text=_("Language (auto, en, fr, …):")).pack(side="left")
+        ttk.Entry(row, textvariable=self.speech_language, width=10).pack(side="left", padx=8)
+        self.apply_speech_button = ttk.Button(row, text=_("Apply speech configuration"), command=self.configure_speech,
+                                              state="disabled" if self.demo else "normal")
+        self.apply_speech_button.pack(side="left")
+        ttk.Button(row, text=_("Remove configuration"), command=self.clear_speech,
+                   state="disabled" if self.demo else "normal").pack(side="left", padx=8)
+        ttk.Label(self.models_tab, text=_("Changes apply to newly queued tasks. Existing tasks retain their selected model. "
+                                         "Auto detection requires a multilingual model; use en for an English-only model. "
+                                         "Demo mode ignores saved speech settings."), wraplength=850).pack(anchor="w", pady=8)
+
+    def _browse_model(self, variable):
+        path = filedialog.askopenfilename(parent=self.root, title=_("Select local speech engine or model"))
+        if path:
+            variable.set(path)
+
+    def configure_speech(self):
+        if self.demo:
+            return
+        def operation():
+            config = WhisperConfig(Path(self.speech_executable.get()), Path(self.speech_model.get()),
+                                   self.speech_language.get().strip())
+            self.store.set_speech_config(config)
+            self.tasks.set_speech(WhisperCppSpeech(config))
+            self._update_banner()
+            self._update_transcribe_button()
+        self._guard(operation)
+
+    def clear_speech(self):
+        if self.demo:
+            return
+        self.store.set_speech_config(None)
+        self.tasks.set_speech(UnconfiguredSpeech())
+        self.speech_executable.set("")
+        self.speech_model.set("")
+        self.speech_language.set("auto")
+        self._update_banner()
+        self._update_transcribe_button()
 
     def _build_settings(self):
         for name, status in dependency_status().items():
@@ -142,7 +227,7 @@ class Application:
 
     def import_audio(self):
         paths = filedialog.askopenfilenames(parent=self.root, title=_("Import audio"),
-                                           filetypes=[(_("Audio files"), "*.wav *.mp3 *.flac *.m4a *.ogg")])
+                                           filetypes=[(_("PCM WAV files"), "*.wav"), (_("All files"), "*")])
         for path in paths:
             self._guard(lambda p=path: self.store.import_audio(Path(p)))
         self._snapshot = None
@@ -239,6 +324,12 @@ class Application:
                 tree.selection_set(key)
 
     def _poll(self):
+        playback = self.playback.snapshot()
+        self.playback_label.configure(text=_("Playback: {status}").format(status=_(playback.status))
+                                      + (f" — {_(playback.error)}" if playback.error else ""))
+        self.playback_progress.configure(value=playback.progress * 100)
+        self.play_button.configure(state="disabled" if playback.status == "playing" else "normal")
+        self.stop_button.configure(state="normal" if playback.status == "playing" else "disabled")
         sources, tasks = self.store.sources(), self.store.tasks()
         version_counts = {s["id"]: len(self.store.versions(s["id"])) for s in sources}
         snapshot = (sources, tasks, version_counts)
@@ -254,7 +345,14 @@ class Application:
         self._poll_id = self.root.after(150, self._poll)
 
     def close(self):
-        if self._poll_id is not None:
-            self.root.after_cancel(self._poll_id)
+        if self._closed:
+            return
+        self._closed = True
+        self.playback.close()
         self.tasks.close()
-        self.root.destroy()
+        try:
+            if self._poll_id is not None:
+                self.root.after_cancel(self._poll_id)
+            self.root.destroy()
+        except tk.TclError:
+            pass  # Worker cancellation still applies if Tk was already destroyed.

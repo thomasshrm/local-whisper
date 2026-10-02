@@ -13,14 +13,25 @@ observed on GitHub; they do not validate desktop packaging or hardware.
 
 ## Increment 2 — verified audio and speech integration
 
+Implemented first slice: optional `sounddevice` PCM WAV playback with progress
+and cancellation; local whisper.cpp CLI configuration in Models; CPU transcription
+of mono 16 kHz/16-bit PCM WAV; process termination on cancellation; exact raw
+text/provenance preservation and immutable queued model selection. Local speech
+and audio integration tests are separate from routine simulated tests. See
+[the runtime decision](decisions/0002-local-audio-and-whisper-cli.md) and validation
+evidence for compatibility sources and actual platform checks.
+
+Remaining:
+
 1. Confirm target languages, reference CPU/GPU/RAM and latency expectations.
-2. Verify exact Whisper-style and Parakeet 0.6B model/runtime combinations across
+2. Extend verification of Whisper-style and Parakeet 0.6B model/runtime combinations across
    Windows, macOS, Debian and Arch: identifiers, versions, licenses, formats,
    language support and hardware requirements. Clarify `oruk/orukeet` first.
-3. Select a playback/decoder/capture stack, check its packaging and licenses,
-   then implement PCM WAV playback and a first real offline transcription adapter.
-4. Add progress reporting, bounded work history, model loading states, safe worker
-   process isolation and per-model integration tests. History ownership is now
+3. Add decoding/conversion for other formats after license and packaging checks;
+   evaluate microphone capture and VAD separately. Confirm reference languages,
+   hardware and latency before recommending models or acceleration settings.
+4. Add inference progress reporting, bounded work history, precise model loading
+   states and further per-model integration tests. History ownership is now
    enforced by the desktop entry point; keep it across future worker processes.
 
 ## Increment 3 — local intelligent transcript and report
